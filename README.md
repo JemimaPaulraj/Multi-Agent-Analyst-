@@ -163,7 +163,3 @@ pytest tests/
 ### Debugging
 
 The system prints debug information during execution. Set `verbose=False` in `run_query()` to suppress output.
-
-## License
-
-MIT License
