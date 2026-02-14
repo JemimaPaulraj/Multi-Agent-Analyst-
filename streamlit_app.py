@@ -3,11 +3,18 @@ Streamlit UI for the Multi-Agent Analyst system.
 """
 
 import os
+import uuid
 import streamlit as st
 import requests
 
 # Configuration - Use environment variable or default to localhost
 API_URL = os.getenv("API_URL", "http://localhost:8000")
+
+# Initialize session state for conversation memory
+if "session_id" not in st.session_state:
+    st.session_state.session_id = str(uuid.uuid4())
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
 
 # Page config
 st.set_page_config(
@@ -40,6 +47,16 @@ with st.sidebar:
     
     st.divider()
     
+    # Session management
+    st.markdown("### 🧠 Session")
+    st.caption(f"ID: {st.session_state.session_id[:8]}...")
+    if st.button("New Session", use_container_width=True):
+        st.session_state.session_id = str(uuid.uuid4())
+        st.session_state.chat_history = []
+        st.rerun()
+    
+    st.divider()
+    
     st.markdown("### 💡 Example Queries")
     st.markdown("""
     **RAG (Knowledge):**
@@ -55,64 +72,51 @@ with st.sidebar:
     - Predict ticket volume for 7 days
     """)
 
-# Main content
-st.header("📝 Submit Query")
+# Display chat history
+for msg in st.session_state.chat_history:
+    with st.chat_message(msg["role"]):
+        st.write(msg["content"])
+        if msg.get("work"):
+            with st.expander("🔍 Agent Work Details", expanded=False):
+                st.json(msg["work"])
 
-# Query input
-query = st.text_area(
-    "Enter your question:",
-    placeholder="e.g., Forecast ticket count for next 3 days",
-    height=100
-)
-
-# Submit button
-col1, col2 = st.columns([1, 4])
-with col1:
-    submit = st.button("🚀 Submit", type="primary", use_container_width=True)
-with col2:
-    clear = st.button("🗑️ Clear", use_container_width=True)
-
-if clear:
-    st.rerun()
-
-# Process query
-if submit and query.strip():
-    with st.spinner("Processing your query..."):
-        try:
-            response = requests.post(
-                f"{API_URL}/query",
-                json={"query": query},
-                timeout=120  # 2 min timeout for complex queries
-            )
-            
-            if response.status_code == 200:
-                data = response.json()
+# Chat input at the bottom
+if user_input := st.chat_input("Type your message..."):
+    # Display user message
+    with st.chat_message("user"):
+        st.write(user_input)
+    st.session_state.chat_history.append({"role": "user", "content": user_input})
+    
+    # Get AI response
+    with st.chat_message("assistant"):
+        with st.spinner("Thinking..."):
+            try:
+                response = requests.post(
+                    f"{API_URL}/query",
+                    json={"query": user_input, "session_id": st.session_state.session_id},
+                    timeout=120
+                )
                 
-                # Display answer
-                st.header("📤 Response")
-                st.success(data['answer'])
-                
-                # Display work details in expander
-                with st.expander("🔍 View Agent Work Details", expanded=False):
-                    st.json(data['work'])
-                
-                # Show steps
-                st.caption(f"Completed in {data['steps']} step(s)")
-                
-            else:
-                error_detail = response.json().get('detail', 'Unknown error')
-                st.error(f"Error: {error_detail}")
-                
-        except requests.exceptions.ConnectionError:
-            st.error("❌ Cannot connect to API. Make sure the server is running:")
-            st.code("python main.py")
-        except requests.exceptions.Timeout:
-            st.error("❌ Request timed out. The query might be too complex.")
-        except Exception as e:
-            st.error(f"❌ Error: {str(e)}")
-
-elif submit:
-    st.warning("Please enter a query.")
+                if response.status_code == 200:
+                    data = response.json()
+                    st.write(data['answer'])
+                    with st.expander("🔍 Agent Work Details", expanded=False):
+                        st.json(data['work'])
+                    st.session_state.chat_history.append({
+                        "role": "assistant", 
+                        "content": data['answer'],
+                        "work": data['work']
+                    })
+                else:
+                    error_msg = response.json().get('detail', 'Unknown error')
+                    st.error(f"Error: {error_msg}")
+                    
+            except requests.exceptions.ConnectionError:
+                st.error("❌ Cannot connect to API. Make sure the server is running.")
+            except requests.exceptions.Timeout:
+                st.error("❌ Request timed out.")
+            except Exception as e:
+                st.error(f"❌ Error: {str(e)}")
 
 # Footer
 st.divider()

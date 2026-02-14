@@ -4,7 +4,6 @@ RAG Agent - Reads PDFs from S3 bucket
 
 import os
 import sys
-import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -24,7 +23,7 @@ from config import llm
 
 # S3 Configuration
 S3_BUCKET = os.getenv("S3_BUCKET", "ticket-forecasting-lake")
-S3_PREFIX = os.getenv("S3_PREFIX", "RAG_Data/")  # Folder path in bucket
+S3_PREFIX = os.getenv("S3_PREFIX", "RAG_Data/")
 AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
 
 # Local cache for downloaded PDFs
@@ -53,7 +52,6 @@ def download_pdfs_from_s3():
     downloaded_files = []
     
     try:
-        # List objects in S3 prefix
         paginator = s3.get_paginator('list_objects_v2')
         pages = paginator.paginate(Bucket=S3_BUCKET, Prefix=S3_PREFIX)
         
@@ -61,11 +59,9 @@ def download_pdfs_from_s3():
             for obj in page.get('Contents', []):
                 key = obj['Key']
                 
-                # Only process PDF files
                 if not key.lower().endswith('.pdf'):
                     continue
                 
-                # Download to cache
                 filename = Path(key).name
                 local_path = CACHE_DIR / filename
                 
@@ -82,14 +78,12 @@ def download_pdfs_from_s3():
 
 
 def get_vectorstore():
-    """Check if vectorstore exists in session or disk. Returns None if not found."""
+    """Check if vectorstore exists in session or disk."""
     
-    # Check session
     if _state["vectorstore"] is not None:
         print("[RAG] Using vectorstore from session")
         return _state["vectorstore"]
     
-    # Check disk (FAISS saves index.faiss and index.pkl)
     faiss_index = VECTORSTORE_DIR / "index.faiss"
     if faiss_index.exists():
         print("[RAG] Loading vectorstore from disk")
@@ -108,7 +102,6 @@ def create_vectorstore():
     
     print("[RAG] Creating new vectorstore from S3 documents...")
     
-    # Step 1/3: Download PDFs from S3
     pdf_files = download_pdfs_from_s3()
     
     if not pdf_files:
@@ -146,42 +139,53 @@ def create_vectorstore():
 
 
 def rag_agent(query: str) -> dict:
-    """Use vectorstore to answer query. Creates it if not present."""
+    """Use vectorstore to answer query."""
     
-    # Try to get existing vectorstore, else create new
-    vectorstore = get_vectorstore()
-    if vectorstore is None:
-        vectorstore = create_vectorstore()
-    
-    if vectorstore is None:
+    try:
+        vectorstore = get_vectorstore()
+        if vectorstore is None:
+            vectorstore = create_vectorstore()
+        
+        if vectorstore is None:
+            return {
+                "agent": "rag_agent",
+                "query": query,
+                "answer": "No documents loaded. Add PDFs to S3 bucket and restart.",
+                "sources": []
+            }
+        
+        retriever = vectorstore.as_retriever(search_kwargs={"k": 4})
+        docs = retriever.invoke(query)
+        context = "\n\n".join([doc.page_content for doc in docs])
+        
+        print(f"[RAG] Context retrieved: {context[:500]}...")
+        
+        prompt = ChatPromptTemplate.from_template(
+            "Answer based on context. If unsure, say 'I don't know'.\n\nContext: {context}\n\nQuestion: {question}"
+        )
+        chain = prompt | llm | StrOutputParser()
+        answer = chain.invoke({"context": context, "question": query})
+        
+        sources = [
+            {"source": d.metadata.get("source", ""), "page": d.metadata.get("page", "")}
+            for d in docs
+        ]
+        
         return {
             "agent": "rag_agent",
             "query": query,
-            "answer": "No documents loaded. Add PDFs to 'documents' folder and restart.",
-            "sources": []
+            "answer": answer,
+            "sources": sources
         }
-    
-    # Get relevant documents
-    retriever = vectorstore.as_retriever(search_kwargs={"k": 4})
-    docs = retriever.invoke(query)
-    context = "\n\n".join([doc.page_content for doc in docs])
-    
-    # Create chain and get answer
-    prompt = ChatPromptTemplate.from_template(
-        "Answer based on context. If unsure, say 'I don't know'.\n\nContext: {context}\n\nQuestion: {question}"
-    )
-    chain = prompt | llm | StrOutputParser()
-    answer = chain.invoke({"context": context, "question": query})
-    
-    # Extract sources
-    sources = [
-        {"source": d.metadata.get("source", ""), "page": d.metadata.get("page", "")}
-        for d in docs
-    ]
-    
-    return {
-        "agent": "rag_agent",
-        "query": query,
-        "answer": answer,
-        "sources": sources
-    }
+        
+    except Exception as e:
+        print(f"[RAG] ERROR: {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
+        return {
+            "agent": "rag_agent",
+            "query": query,
+            "answer": f"Error: {str(e)}",
+            "sources": [],
+            "error": True
+        }

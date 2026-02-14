@@ -20,6 +20,7 @@ app = FastAPI(
 # Request/Response models
 class QueryRequest(BaseModel):
     query: str
+    session_id: str = "default"  # Session ID for conversation memory
 
 
 class QueryResponse(BaseModel):
@@ -58,15 +59,18 @@ def process_query(request: QueryRequest):
         raise HTTPException(status_code=400, detail="Query cannot be empty")
     
     try:
-        # Initialize state
+        # Initialize state with new message
         init_state: State = {
             "messages": [HumanMessage(content=request.query)],
             "work": {},
             "steps": 0
         }
         
-        # Run the graph
-        result = langgraph_app.invoke(init_state)
+        # Config with session ID for memory
+        config = {"configurable": {"thread_id": request.session_id}}
+        
+        # Run the graph with memory
+        result = langgraph_app.invoke(init_state, config)
         
         # Extract final answer from last message
         messages = result.get("messages", [])

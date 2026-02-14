@@ -13,6 +13,7 @@ if _parent not in sys.path:
 if _current not in sys.path:
     sys.path.insert(0, _current)
 
+from config import llm
 from forecasting import forecasting_agent
 from rag import rag_agent
 from db import db_agent
@@ -24,6 +25,7 @@ from orchestrator import (
 )
 
 __all__ = [
+    "llm",
     "forecasting_agent",
     "rag_agent",
     "db_agent",

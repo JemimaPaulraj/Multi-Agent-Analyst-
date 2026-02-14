@@ -1,36 +1,43 @@
 """
-Configuration module for the Multi-Agent Analyst system.
-Contains LLM setup, timezone configuration, and utility functions.
+LLM Configuration with AWS Bedrock Guardrails.
 """
 
 import os
-from datetime import datetime
-from zoneinfo import ZoneInfo
-
 from dotenv import load_dotenv
-from langchain_openai import ChatOpenAI
+from langchain_aws import ChatBedrock
 
-# Load environment variables
 load_dotenv()
 
-# ---------------------------
-# Timezone Configuration
-# ---------------------------
-NY_TZ = ZoneInfo("America/New_York")
+# AWS Bedrock Configuration
+AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
+BEDROCK_MODEL_ID = os.getenv("BEDROCK_MODEL_ID", "amazon.nova-pro-v1:0")
 
+# Guardrails Configuration
+GUARDRAIL_ID = os.getenv("BEDROCK_GUARDRAIL_ID", "")
+GUARDRAIL_VERSION = os.getenv("BEDROCK_GUARDRAIL_VERSION", "DRAFT")
+ENABLE_GUARDRAILS = os.getenv("ENABLE_GUARDRAILS", "true").lower() == "true"
 
-def today_ny_str() -> str:
-    """Returns today's date in America/New_York timezone as ISO format string."""
-    return datetime.now(NY_TZ).date().isoformat()  # e.g. "2026-01-29"
+# Create LLM with or without guardrails
+if GUARDRAIL_ID and ENABLE_GUARDRAILS:
+    # With guardrails
+    print(f"[CONFIG] Guardrails ENABLED: {GUARDRAIL_ID} (v{GUARDRAIL_VERSION})")
+    llm = ChatBedrock(
+        model_id=BEDROCK_MODEL_ID,
+        region_name=AWS_REGION,
+        model_kwargs={"temperature": 0},
+        guardrails={
+            "guardrailIdentifier": GUARDRAIL_ID,
+            "guardrailVersion": GUARDRAIL_VERSION,
+            "trace": "enabled"
+        }
+    )
+else:
+    # Without guardrails - don't pass guardrails parameter at all
+    print("[CONFIG] Guardrails DISABLED")
+    llm = ChatBedrock(
+        model_id=BEDROCK_MODEL_ID,
+        region_name=AWS_REGION,
+        model_kwargs={"temperature": 0}
+    )
 
-
-# ---------------------------
-# LLM Configuration
-# ---------------------------
-def get_llm(model: str = "gpt-4o", temperature: float = 0) -> ChatOpenAI:
-    """Returns a configured ChatOpenAI instance."""
-    return ChatOpenAI(model=model, temperature=temperature)
-
-
-# Default LLM instance
-llm = get_llm()
+print(f"[CONFIG] LLM initialized: {BEDROCK_MODEL_ID}")

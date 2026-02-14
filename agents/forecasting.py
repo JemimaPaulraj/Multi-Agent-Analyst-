@@ -8,6 +8,7 @@ import sys
 import json
 from pathlib import Path
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import boto3
 from botocore.exceptions import ClientError
@@ -16,7 +17,9 @@ sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from schemas import ForecastPayload
-from config import NY_TZ
+
+# Timezone Configuration
+NY_TZ = ZoneInfo("America/New_York")
 
 # SageMaker Configuration
 SAGEMAKER_ENDPOINT = os.getenv("SAGEMAKER_ENDPOINT", "prophet-fastapi-endpoint-latest")
@@ -39,7 +42,6 @@ def get_sagemaker_runtime():
 def check_forecast_service():
     """Check if the SageMaker endpoint is available."""
     try:
-        # Use SageMaker client (not runtime) to describe endpoint
         sagemaker = boto3.client("sagemaker", region_name=AWS_REGION)
         response = sagemaker.describe_endpoint(EndpointName=SAGEMAKER_ENDPOINT)
         status = response.get("EndpointStatus", "Unknown")
@@ -67,7 +69,6 @@ def forecasting_agent(payload: ForecastPayload) -> dict:
     """
     horizon_days = int(payload.horizon_days)
     
-    # Determine start date (default to today if not specified)
     if payload.start_date:
         start_date = payload.start_date
         print(f"[FORECAST] Using specified start date: {start_date}")
@@ -75,7 +76,6 @@ def forecasting_agent(payload: ForecastPayload) -> dict:
         start_date = datetime.now(NY_TZ).date().isoformat()
         print(f"[FORECAST] Using default start date (today): {start_date}")
     
-    # Build request payload
     request_payload = {
         "horizon_days": horizon_days,
         "start_date": start_date
@@ -93,7 +93,6 @@ def forecasting_agent(payload: ForecastPayload) -> dict:
             Body=json.dumps(request_payload)
         )
         
-        # Parse response
         result = json.loads(response["Body"].read().decode("utf-8"))
         
         return {

@@ -4,11 +4,11 @@ Coordinates between RAG, DB, and Forecasting agents.
 """
 
 import sys
+import json
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
-
-import json
 
 from langchain_core.messages import AIMessage, SystemMessage
 
@@ -72,15 +72,7 @@ planner = llm.with_structured_output(OrchestratorDecision)
 # Orchestrator Node
 # ---------------------------
 def orchestrator_node(state: State) -> dict:
-    """
-    Main orchestrator node that decides the next action.
-    
-    Args:
-        state: Current graph state
-        
-    Returns:
-        Updated state dictionary
-    """
+    """Main orchestrator node that decides the next action."""
     debug_state("Orchestrator_Agent", state)
     
     work = state.get("work", {})
@@ -112,7 +104,7 @@ def orchestrator_node(state: State) -> dict:
     debug_msg = (
         f"DEBUG Orchestrator Decision:\n"
         f"action={decision.action}\n"
-        f"reasoning={decision.reasoning}\n"
+        f"reasoning={decision.reasoning or 'N/A'}\n"
         f"forecasting_payload={decision.forecasting_payload.model_dump() if decision.forecasting_payload else None}\n"
         f"rag_query={decision.rag_query}\n"
         f"db_query={decision.db_query}\n"
@@ -157,15 +149,7 @@ def orchestrator_node(state: State) -> dict:
 # Agent Call Nodes
 # ---------------------------
 def call_forecasting_node(state: State) -> dict:
-    """
-    Node that calls the Forecasting Agent.
-    
-    Args:
-        state: Current graph state
-        
-    Returns:
-        Updated state dictionary with forecast results
-    """
+    """Node that calls the Forecasting Agent."""
     debug_state("Forecasting_Agent", state)
     
     work = dict(state.get("work", {}))
@@ -186,15 +170,7 @@ def call_forecasting_node(state: State) -> dict:
 
 
 def call_rag_node(state: State) -> dict:
-    """
-    Node that calls the RAG Agent.
-    
-    Args:
-        state: Current graph state
-        
-    Returns:
-        Updated state dictionary with RAG results
-    """
+    """Node that calls the RAG Agent."""
     debug_state("RAG_Agent", state)
     
     work = dict(state.get("work", {}))
@@ -215,15 +191,7 @@ def call_rag_node(state: State) -> dict:
 
 
 def call_db_node(state: State) -> dict:
-    """
-    Node that calls the DB Agent.
-    
-    Args:
-        state: Current graph state
-        
-    Returns:
-        Updated state dictionary with DB query results
-    """
+    """Node that calls the DB Agent."""
     debug_state("Database_Agent", state)
     
     work = dict(state.get("work", {}))

@@ -4,6 +4,7 @@ Defines the LangGraph workflow structure.
 """
 
 from langgraph.graph import StateGraph, START, END
+from langgraph.checkpoint.memory import MemorySaver
 
 from state import State
 from agents import (
@@ -12,6 +13,9 @@ from agents import (
     call_rag_node,
     call_db_node,
 )
+
+# In-memory checkpointer for conversation memory
+memory = MemorySaver()
 
 
 def next_step_router(state: State) -> str:
@@ -70,7 +74,7 @@ def build_graph() -> StateGraph:
     builder.add_edge("Database_Agent", "Orchestrator_Agent")
     builder.add_edge("Forecasting_Agent", "Orchestrator_Agent")
     
-    return builder.compile()
+    return builder.compile(checkpointer=memory)
 
 
 # Create the compiled application

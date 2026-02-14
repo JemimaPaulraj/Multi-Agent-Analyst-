@@ -32,7 +32,6 @@ class DBQueryDecision(BaseModel):
 # ---------------------------
 # Orchestrator Schemas
 # ---------------------------
-# The LLM reads the orchestrator system message and the current state.work ( What it has already collected) and takes decision and returns the response in
 class OrchestratorDecision(BaseModel):
     """
     Structured output for the Orchestrator's routing decision.
@@ -40,7 +39,7 @@ class OrchestratorDecision(BaseModel):
     action: Literal["CALL_FORECASTING", "CALL_RAG", "CALL_DB", "FINISH"] = Field(
         description="Next action to take"
     )
-    reasoning: str = Field(description="Explanation for the decision")
+    reasoning: str | None = Field(default=None, description="Explanation for the decision")
     
     # For CALL_FORECASTING:
     forecasting_payload: ForecastPayload | None = None
